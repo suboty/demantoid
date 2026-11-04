@@ -1,2 +1,2 @@
-run-local-postgresql:
-	./scripts/postgresql.sh
+run-timescaledb:
+	./scripts/timescaledb.sh

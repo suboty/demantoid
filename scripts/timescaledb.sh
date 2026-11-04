@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-CONTAINER_NAME=${1:-"postgres-db-demantoid"}
-IMAGE=${2:-"postgres"}
-HOST_PORT=${3:-"15432"}
+CONTAINER_NAME=${1:-"timescale-db-demantoid"}
+IMAGE=${2:-"timescale/timescaledb-ha:pg18"}
+HOST_PORT=${3:-"16543"}
 CONTAINER_PORT=${4:-"5432"}
 
 if [ -n "$(docker ps -a -q -f name=^/${CONTAINER_NAME}$)" ]; then
@@ -18,8 +18,10 @@ else
     docker run \
       --name "${CONTAINER_NAME}" \
       -p "${HOST_PORT}:${CONTAINER_PORT}" \
-      -e POSTGRES_USER=demantoid \
-      -e POSTGRES_PASSWORD=demantoid_password \
+      -e POSTGRES_USER=demo_user \
+      -e POSTGRES_PASSWORD=demo_password \
       -e POSTGRES_DB=demantoid \
       -d "${IMAGE}"
 fi
+
+echo "URL: <postgresql://demo_user:demo_password@localhost:$HOST_PORT/demantoid>"
