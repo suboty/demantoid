@@ -3,7 +3,12 @@ INCLUDE_DIR = include
 SRC_DIR = src
 BUILD_DIR = build
 
-CFLAGS ?= -std=c11 -Wall -Wextra -O2
+LIBPQ_INC := $(shell ./scripts/get-libpg-path.sh | grep INCLUDEDIR | cut -d= -f2)
+LIBPQ_LIB := $(shell ./scripts/get-libpg-path.sh | grep LIBDIR | cut -d= -f2)
+
+CFLAGS += -I$(LIBPQ_INC)
+LDFLAGS += -L$(LIBPQ_LIB) -lpq
+
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -O2
 PIC_FLAGS = -fPIC
 
@@ -21,7 +26,7 @@ $(LIB_A): $(OBJ)
 	$(AR) rcs $@ $^
 
 $(LIB_SO): $(OBJ)
-	$(CC) -shared -o $@ $^
+	$(CC) -shared -o $@ $^ $(LDFLAGS)
 
 $(OBJ): $(SRC_DIR)/$(LIB_NAME).c $(HEADER) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(PIC_FLAGS) -I$(INCLUDE_DIR) -c $< -o $@
@@ -31,18 +36,18 @@ $(BUILD_DIR):
 
 .PHONY: lib lib-static lib-shared
 lib: lib-static lib-shared
-lib-static:  $(LIB_A)
-lib-shared:  $(LIB_SO)
+lib-static: $(LIB_A)
+lib-shared: $(LIB_SO)
 
 # Tests
 .PHONY: test test-c test-cpp test-python
 .NOTPARALLEL: test
 
 $(BUILD_DIR)/test_c: $(TEST_C) $(LIB_A)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(LIB_A)
+	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(LIB_A) $(LDFLAGS)
 
 $(BUILD_DIR)/test_cpp: $(TEST_CPP) $(LIB_A)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(LIB_A)
+	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(LIB_A) $(LDFLAGS)
 
 test-c: $(BUILD_DIR)/test_c
 	@./$(BUILD_DIR)/test_c
@@ -54,6 +59,12 @@ test-python: $(TEST_PY) $(LIB_SO)
 test: test-c test-cpp test-python
 
 # Scripts
-.PHONY: run-timescaledb
+.PHONY: run-timescaledb install-dependencies generate-compile-flags
 run-timescaledb: scripts/timescaledb.sh
 	@./scripts/timescaledb.sh
+
+install-dependencies: scripts/install-dependencies.sh
+	@./scripts/install-dependencies.sh
+
+generate-compile-flags: scripts/generate-compile-flags.sh
+	@./scripts/generate-compile-flags.sh
