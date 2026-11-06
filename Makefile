@@ -13,6 +13,7 @@ CXXFLAGS ?= -std=c++17 -Wall -Wextra -O2
 PIC_FLAGS = -fPIC
 
 TEST_C = tests/test.c
+TEST_DE_C = tests/de.c
 TEST_CPP = tests/test.cpp
 TEST_PY = tests/test.py
 
@@ -43,11 +44,14 @@ lib-shared: $(LIB_SO)
 .PHONY: test test-c test-cpp test-python
 .NOTPARALLEL: test
 
-$(BUILD_DIR)/test_c: $(TEST_C) $(LIB_A)
-	@$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(LIB_A) $(LDFLAGS)
+$(BUILD_DIR)/test_c: $(TEST_C) $(BUILD_DIR)/de_c.o $(LIB_A)
+	@$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(BUILD_DIR)/de_c.o $(LIB_A) $(LDFLAGS)
 
-$(BUILD_DIR)/test_cpp: $(TEST_CPP) $(LIB_A)
-	@$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(LIB_A) $(LDFLAGS)
+$(BUILD_DIR)/de_c.o: $(TEST_DE_C) $(HEADER) | $(BUILD_DIR)
+	@$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+
+$(BUILD_DIR)/test_cpp: $(TEST_CPP) $(BUILD_DIR)/de_c.o $(LIB_A)
+	@$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(BUILD_DIR)/de_c.o $(LIB_A) $(LDFLAGS)
 
 test-c: $(BUILD_DIR)/test_c
 	@./$(BUILD_DIR)/test_c

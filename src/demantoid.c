@@ -1,11 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <demantoid.h>
 #include <libpq-fe.h>
-
-void test_print() {
-    printf("Demantoid test\n");
-}
 
 struct DemantoidConn {
     PGconn *pg;
@@ -39,4 +36,12 @@ void demantoid_close(DemantoidConn *conn) {
     PQfinish(conn -> pg);
     free(conn);
     return;
+}
+
+bool create_experiment(DemantoidConn *conn, const char *experimentinfo) {
+    return true;
+}
+
+bool add_metric(DemantoidConn *conn, int run_number, char *metric_name, float metric_value) {
+    return true;
 }

@@ -1,8 +1,8 @@
+import de
 import demantoid
 
 if __name__ == '__main__':
     print('demantoid tests in Python have been launched...')
-    demantoid.test_print()
 
     wrong_connection_str = "123321"
     wrong_conn = demantoid.demantoid_connect(wrong_connection_str)
@@ -23,3 +23,9 @@ if __name__ == '__main__':
         demantoid.demantoid_close(correct_conn)
     else:
         print("[ERROR] - corrected test connection")
+
+    de_test_result = de.run_de()
+    if de_test_result:
+        print("[OK] - de 1/rand/bin example")
+    else:
+        print("[ERROR] - de 1/rand/bin example\n")

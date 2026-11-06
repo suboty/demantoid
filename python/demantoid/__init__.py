@@ -31,9 +31,6 @@ if _lib_path is None:
 
 _lib = ctypes.CDLL(_lib_path)
 
-_lib.test_print.argtypes = []
-_lib.test_print.restype = None
-
 class DemantoidConn(ctypes.Structure):
     pass
 
@@ -45,11 +42,34 @@ _lib.demantoid_connect.restype = DemantoidConnPtr
 _lib.demantoid_close.argtypes = [DemantoidConnPtr]
 _lib.demantoid_close.restype = None
 
-def test_print():
-    _lib.test_print()
+_lib.create_experiment.argtypes = [DemantoidConnPtr, ctypes.c_char_p]
+_lib.create_experiment.restype = ctypes.c_bool
+
+_lib.add_metric.argtypes = [DemantoidConnPtr, ctypes.c_int, ctypes.c_char_p, ctypes.c_float]
+_lib.add_metric.restype = ctypes.c_bool
 
 def demantoid_connect(connection_info: str) -> DemantoidConnPtr:
     return _lib.demantoid_connect(connection_info.encode("utf-8"))
 
 def demantoid_close(conn: DemantoidConnPtr) -> None:
     return _lib.demantoid_close(conn)
+
+def create_experiment(conn: DemantoidConnPtr, experiment_info: str) -> bool:
+    return _lib.create_experiment(
+        conn,
+        experiment_info.encode("utf-8")
+    )
+
+
+def add_metric(
+    conn: DemantoidConnPtr,
+    run_number: int,
+    metric_name: str,
+    metric_value: float
+) -> bool:
+    return _lib.add_metric(
+        conn,
+        run_number,
+        metric_name.encode("utf-8"),
+        metric_value
+    )

@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <demantoid.h>
+#include "de.h"
 
 int main() {
     printf("demantoid tests in C have been launched...\n");
-    test_print();
 
     const char *wrong_connection_str = "123321";
     DemantoidConn *wrong_conn = demantoid_connect(wrong_connection_str);
@@ -26,5 +26,12 @@ int main() {
         demantoid_close(correct_conn);
     } else {
         printf("[ERROR] - corrected test connection\n");
+    }
+
+    bool de_test_result = run_de();
+    if (de_test_result) {
+        printf("[OK] - de 1/rand/bin example\n");
+    } else {
+        printf("[ERROR] - de 1/rand/bin example\n");
     }
 }
