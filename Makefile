@@ -23,13 +23,13 @@ HEADER = $(INCLUDE_DIR)/$(LIB_NAME).h
 
 # Library
 $(LIB_A): $(OBJ)
-	$(AR) rcs $@ $^
+	@$(AR) rcs $@ $^
 
 $(LIB_SO): $(OBJ)
-	$(CC) -shared -o $@ $^ $(LDFLAGS)
+	@$(CC) -shared -o $@ $^ $(LDFLAGS)
 
 $(OBJ): $(SRC_DIR)/$(LIB_NAME).c $(HEADER) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(PIC_FLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+	@$(CC) $(CFLAGS) $(PIC_FLAGS) -I$(INCLUDE_DIR) -c $< -o $@
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -44,10 +44,10 @@ lib-shared: $(LIB_SO)
 .NOTPARALLEL: test
 
 $(BUILD_DIR)/test_c: $(TEST_C) $(LIB_A)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(LIB_A) $(LDFLAGS)
+	@$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_C) $(LIB_A) $(LDFLAGS)
 
 $(BUILD_DIR)/test_cpp: $(TEST_CPP) $(LIB_A)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(LIB_A) $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(TEST_CPP) $(LIB_A) $(LDFLAGS)
 
 test-c: $(BUILD_DIR)/test_c
 	@./$(BUILD_DIR)/test_c

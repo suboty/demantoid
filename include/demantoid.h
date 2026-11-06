@@ -7,6 +7,11 @@ extern "C" {
 
 void test_print(void);
 
+typedef struct DemantoidConn DemantoidConn;
+
+DemantoidConn *demantoid_connect(const char *conninfo);
+void demantoid_close(DemantoidConn *conn);
+
 #ifdef __cplusplus
 }
 #endif
