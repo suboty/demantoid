@@ -24,7 +24,8 @@ if __name__ == '__main__':
     else:
         print("[ERROR] - corrected test connection")
 
-    de_test_result = de.run_de()
+    experiment_info_str = "tablename=demantoid_test_py"
+    de_test_result = de.run_de(experiment_info_str)
     if de_test_result:
         print("[OK] - de 1/rand/bin example")
     else:

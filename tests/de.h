@@ -7,7 +7,7 @@ extern "C" {
 
 #include <stdbool.h>
 
-bool run_de();
+bool run_de(const char *experiment_info_str);
 float fitness_function(int x1, int x2, int x3);
 float calculate_fitness(int *population, float *pop_values);
 

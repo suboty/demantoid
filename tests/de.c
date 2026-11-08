@@ -24,7 +24,7 @@ void calculate_fitness(float population[DIM][POP_SIZE], float pop_values[POP_SIZ
     }
 }
 
-bool run_de() {
+bool run_de(const char *experiment_info_str) {
     srand((unsigned)time(NULL));
     float best_values[RUNS];
 
@@ -36,8 +36,6 @@ bool run_de() {
         connect_timeout=10 \
         user=demo_user \
         password=demo_password";
-
-    const char *experiment_info_str = "tablename=demantoid_test";
 
     DemantoidConn *demantoid_conn = demantoid_connect(connection_str);
 

@@ -18,7 +18,7 @@ def calculate_fitness(population: list[list], pop_values: list[float]) -> None:
         pop_values[i] = fitness_function(*individual)
 
 
-def run_de() -> bool:
+def run_de(experiment_info_str: str) -> bool:
     tests_ok = True
 
     correct_connection_str = (
@@ -31,7 +31,6 @@ def run_de() -> bool:
     )
     demantoid_conn = demantoid.demantoid_connect(correct_connection_str)
 
-    experiment_info_str = "tablename=demantoid_test"
     tests_ok *= demantoid.create_experiment(demantoid_conn, experiment_info_str)
 
     best_values = [MAX_BEST_VALUE] * RUNS

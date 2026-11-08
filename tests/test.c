@@ -28,7 +28,8 @@ int main() {
         printf("[ERROR] - corrected test connection\n");
     }
 
-    bool de_test_result = run_de();
+    const char *experiment_info_str = "tablename=demantoid_test_с";
+    bool de_test_result = run_de(experiment_info_str);
     if (de_test_result) {
         printf("[OK] - de 1/rand/bin example\n");
     } else {
