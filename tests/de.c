@@ -93,6 +93,7 @@ bool run_de(const char *experiment_info_str) {
         tests_ok *= add_metric(
             demantoid_conn,
             i_run,
+            -1,
             "test fitness best in population",
             best_values[i_run]
         );

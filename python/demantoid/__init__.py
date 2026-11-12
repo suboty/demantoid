@@ -45,7 +45,7 @@ _lib.demantoid_close.restype = None
 _lib.create_experiment.argtypes = [DemantoidConnPtr, ctypes.c_char_p]
 _lib.create_experiment.restype = ctypes.c_bool
 
-_lib.add_metric.argtypes = [DemantoidConnPtr, ctypes.c_int, ctypes.c_char_p, ctypes.c_float]
+_lib.add_metric.argtypes = [DemantoidConnPtr, ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_float]
 _lib.add_metric.restype = ctypes.c_bool
 
 def demantoid_connect(connection_info: str) -> DemantoidConnPtr:
@@ -64,12 +64,14 @@ def create_experiment(conn: DemantoidConnPtr, experiment_info: str) -> bool:
 def add_metric(
     conn: DemantoidConnPtr,
     run_number: int,
+    pop_number: int,
     metric_name: str,
     metric_value: float
 ) -> bool:
     return _lib.add_metric(
         conn,
         run_number,
+        pop_number,
         metric_name.encode("utf-8"),
         metric_value
     )

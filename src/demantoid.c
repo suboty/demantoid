@@ -7,177 +7,267 @@
 
 struct DemantoidConn {
     PGconn *pg;
+    char *tablename;
 };
 
+static bool exec_command(PGconn *pg, const char *sql) {
+    PGresult *res = PQexec(pg, sql);
+    if (!res) {
+        fprintf(stderr, "[demantoid | ERROR] %s\n", PQerrorMessage(pg));
+        return false;
+    }
+    bool ok = PQresultStatus(res) == PGRES_COMMAND_OK;
+    if (!ok) {
+        fprintf(stderr, "[demantoid | ERROR] SQL command failed: %s\n",
+                PQresultErrorMessage(res));
+    }
+    PQclear(res);
+    return ok;
+}
+
 DemantoidConn *demantoid_connect(const char *conninfo) {
-    PGconn *conn = PQconnectdb(conninfo);
+    if (!conninfo) {
+        fprintf(stderr, "[demantoid | ERROR] Connection info is NULL\n");
+        return NULL;
+    }
+
+    PGconn *pg = PQconnectdb(conninfo);
+    if (!pg) return NULL;
+    if (PQstatus(pg) != CONNECTION_OK) {
+        fprintf(stderr, "[demantoid | ERROR] Connection failed: %s", PQerrorMessage(pg));
+        PQfinish(pg);
+        return NULL;
+    }
+
+    DemantoidConn *conn = calloc(1, sizeof *conn);
     if (!conn) {
+        PQfinish(pg);
         return NULL;
     }
-
-    if (PQstatus(conn) != CONNECTION_OK) {
-        printf(
-            "[demantoid | ERROR] Connection failed: %s",
-            PQerrorMessage(conn)
-        );
-        PQfinish(conn);
-        return NULL;
-    }
-
-    DemantoidConn *out = malloc(sizeof *out);
-    if (!out) {
-        PQfinish(conn);
-        return NULL;
-    }
-    out -> pg = conn;
-    return out;
+    conn->pg = pg;
+    return conn;
 }
 
 void demantoid_close(DemantoidConn *conn) {
-    if (!conn) {
-        return;
-    }
-    PQfinish(conn -> pg);
+    if (!conn) return;
+    PQfinish(conn->pg);
+    free(conn->tablename);
     free(conn);
-    return;
 }
 
 bool create_experiment(DemantoidConn *conn, const char *experimentinfo) {
+    if (!conn || !conn->pg || !experimentinfo) {
+        fprintf(stderr, "[demantoid | ERROR] Invalid experiment arguments\n");
+        return false;
+    }
+
+    bool success = false;
+    bool in_transaction = false;
+    char *table_name = NULL;
+    char *identifier = NULL;
+    char *regclass_literal = NULL;
+    PGresult *res = NULL;
+
     const char *key = "tablename=";
     const char *start = strstr(experimentinfo, key);
     if (!start) {
-        printf(
-            "[demantoid | ERROR] tablename not found in: %s\n",
-            experimentinfo
-        );
+        fprintf(stderr, "[demantoid | ERROR] tablename not found in: %s\n", experimentinfo);
         return false;
     }
     start += strlen(key);
-
     const char *end = start;
-    while (*end && *end != ' ' && *end != '\0') end++;
-
+    while (*end && *end != ' ' && *end != '\t' && *end != '\n') ++end;
     size_t len = (size_t)(end - start);
-    char *table_name = malloc(len + 1);
-    if (!table_name) return false;
+    if (len == 0) {
+        fprintf(stderr, "[demantoid | ERROR] Empty table name\n");
+        return false;
+    }
 
+    table_name = malloc(len + 1);
+    if (!table_name) goto cleanup;
     memcpy(table_name, start, len);
     table_name[len] = '\0';
 
-    printf("[demantoid | INFO] Detected table name: %s\n", table_name);
-
-    char *escaped_table_name = PQescapeIdentifier(conn->pg, table_name, strlen(table_name));
-    if (!escaped_table_name) {
-        printf("[demantoid | ERROR] Failed to escape table name: %s\n", PQerrorMessage(conn->pg));
-        return false;
+    identifier = PQescapeIdentifier(conn->pg, table_name, len);
+    if (!identifier) {
+        fprintf(stderr, "[demantoid | ERROR] Invalid table identifier: %s\n",
+                PQerrorMessage(conn->pg));
+        goto cleanup;
     }
 
-    char *escaped_table_name_as_literal = PQescapeLiteral(conn->pg, table_name, strlen(table_name));
-    if (!escaped_table_name_as_literal) {
-        printf("[demantoid | ERROR] Failed to escape table name: %s\n", PQerrorMessage(conn->pg));
-        return false;
+    regclass_literal = PQescapeLiteral(conn->pg, identifier, strlen(identifier));
+    if (!regclass_literal) {
+        fprintf(stderr, "[demantoid | ERROR] Cannot escape table reference: %s\n",
+                PQerrorMessage(conn->pg));
+        goto cleanup;
     }
 
-    char create_table_query[1024];
-    int n = snprintf(create_table_query, sizeof(create_table_query),
-        "CREATE TABLE %s ("
+    res = PQexec(conn->pg,
+        "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb')");
+    if (!res) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Extension check failed: %s\n",
+            PQerrorMessage(conn->pg)
+        );
+        goto cleanup;
+    }
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1) {
+        fprintf(stderr, "[demantoid | ERROR] Extension check failed: %s\n",
+                PQresultErrorMessage(res));
+        goto cleanup;
+    }
+    bool installed = strcmp(PQgetvalue(res, 0, 0), "t") == 0;
+    PQclear(res);
+    res = NULL;
+
+    if (!installed) {
+        if (!exec_command(conn->pg, "CREATE EXTENSION IF NOT EXISTS timescaledb"))
+            goto cleanup;
+    }
+
+    if (!exec_command(conn->pg, "BEGIN")) goto cleanup;
+    in_transaction = true;
+
+    const char *create_fmt =
+        "CREATE TABLE IF NOT EXISTS %s ("
         "time TIMESTAMPTZ NOT NULL, "
         "run_id INT NOT NULL, "
-        "metric_name FLOAT NOT NULL, "
-        "metric_value FLOAT NOT NULL);",
-        escaped_table_name);
+        "pop_id INT NOT NULL, "
+        "metric_name TEXT NOT NULL, "
+        "metric_value DOUBLE PRECISION NOT NULL)";
 
-    if (n < 0 || (size_t)n >= sizeof(create_table_query)) {
-        printf("[demantoid | ERROR] Query for table creating string is too long (truncated)\n");
-        return false;
-    }
+    int needed = snprintf(NULL, 0, create_fmt, identifier);
+    if (needed < 0) goto cleanup;
+    char *sql = malloc((size_t)needed + 1);
+    if (!sql) goto cleanup;
+    snprintf(sql, (size_t)needed + 1, create_fmt, identifier);
+    bool ok = exec_command(conn->pg, sql);
+    free(sql);
+    if (!ok) goto cleanup;
 
-    PGresult *create_table_res = PQexec(conn->pg, create_table_query);
+    const char *hyper_fmt =
+        "SELECT create_hypertable(%s::regclass, 'time', if_not_exists => TRUE)";
 
-    if (!create_table_res) {
-        printf(
-            "[demantoid | ERROR] Query for table creating failed: %s\n",
+    needed = snprintf(NULL, 0, hyper_fmt, regclass_literal);
+    if (needed < 0) goto cleanup;
+    sql = malloc((size_t)needed + 1);
+    if (!sql) goto cleanup;
+    snprintf(sql, (size_t)needed + 1, hyper_fmt, regclass_literal);
+    res = PQexec(conn->pg, sql);
+    free(sql);
+
+    if (!res) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Hypertable creation failed: %s\n",
             PQerrorMessage(conn->pg)
         );
-        return false;
+        goto cleanup;
     }
 
-    if (PQresultStatus(create_table_res) != PGRES_COMMAND_OK) {
-        printf(
-            "[demantoid | ERROR] Creating table for metrics process failed: %s\n",
-            PQerrorMessage(conn->pg)
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Hypertable creation failed: %s\n",
+            PQresultErrorMessage(res)
         );
-        PQclear(create_table_res);
-        return false;
+        goto cleanup;
     }
+    PQclear(res);
+    res = NULL;
 
-    PQclear(create_table_res);
-    PQfreemem(escaped_table_name);
+    if (!exec_command(conn->pg, "COMMIT")) goto cleanup;
+    in_transaction = false;
 
-    char create_hypertable_query[1024];
-    int f = snprintf(create_hypertable_query, sizeof(create_hypertable_query),
-        "SELECT create_hypertable(%s, 'time');",
-        escaped_table_name_as_literal
-    );
+    free(conn->tablename);
+    conn->tablename = table_name;
+    table_name = NULL;
+    success = true;
+    printf("[demantoid | INFO] Table %s is ready\n", conn->tablename);
 
-    if (f < 0 || (size_t)f >= sizeof(create_hypertable_query)) {
-        printf("[demantoid | ERROR] Query for hypertable creating string is too long (truncated)\n");
-        return false;
+cleanup:
+    if (in_transaction) {
+        PGresult *rollback = PQexec(conn->pg, "ROLLBACK");
+        if (rollback) PQclear(rollback);
     }
-
-    PGresult *create_hypertable_res = PQexec(conn->pg, create_hypertable_query);
-
-    if (!create_hypertable_res) {
-        printf(
-            "[demantoid | ERROR] Query for hypertable creating failed: %s\n",
-            PQerrorMessage(conn->pg)
-        );
-        return false;
-    }
-
-    if (PQresultStatus(create_hypertable_res) != PGRES_TUPLES_OK) {
-        char *error = PQerrorMessage(conn->pg);
-        char *result = strstr(error, "No function matches");
-        if (result) {
-            PGresult *extension_res = PQexec(
-                conn->pg,
-                "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
-            );
-
-            if (!extension_res) {
-                printf(
-                    "[demantoid | ERROR] Query for extension activating failed: %s\n",
-                    PQerrorMessage(conn->pg)
-                );
-                return false;
-            }
-
-            if (PQresultStatus(extension_res) != PGRES_COMMAND_OK) {
-                printf(
-                    "[demantoid | ERROR] Activating extension for timescaleDB process failed: %s\n",
-                    PQerrorMessage(conn->pg)
-                );
-                PQclear(extension_res);
-                return false;
-            }
-        }
-        else {
-            printf(
-                "[demantoid | ERROR] Creating hypertable for metrics process failed: %s\n",
-                PQerrorMessage(conn->pg)
-            );
-            PQclear(create_hypertable_res);
-            return false;
-        }
-    }
-
-    PQclear(create_hypertable_res);
-
-    printf("[demantoid | INFO] Table %s is successfully created\n", table_name);
+    if (res) PQclear(res);
+    if (regclass_literal) PQfreemem(regclass_literal);
+    if (identifier) PQfreemem(identifier);
     free(table_name);
-    return true;
+    return success;
 }
 
-bool add_metric(DemantoidConn *conn, int run_number, char *metric_name, float metric_value) {
-    return true;
+bool add_metric(
+    DemantoidConn *conn,
+    int run_number,
+    int pop_number,
+    const char *metric_name,
+    float metric_value
+) {
+    if (!conn || !conn->pg || !conn->tablename || !metric_name) {
+        fprintf(stderr, "[demantoid | ERROR] Invalid arguments for adding metric\n");
+        return false;
+    }
+
+    char *identifier = PQescapeIdentifier(
+        conn->pg, conn->tablename, strlen(conn->tablename));
+    if (!identifier) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Cannot escape table name: %s\n",
+            PQerrorMessage(conn->pg)
+        );
+        return false;
+    }
+
+    const char *fmt =
+        "INSERT INTO %s (time, run_id, pop_id, metric_name, metric_value) "
+        "VALUES (NOW(), $1, $2, $3, $4)";
+    int needed = snprintf(NULL, 0, fmt, identifier);
+    if (needed < 0) {
+        PQfreemem(identifier);
+        return false;
+    }
+    char *sql = malloc((size_t)needed + 1);
+    if (!sql) {
+        PQfreemem(identifier);
+        return false;
+    }
+    snprintf(sql, (size_t)needed + 1, fmt, identifier);
+    PQfreemem(identifier);
+
+    char run_str[32], pop_str[32], value_str[64];
+    snprintf(run_str, sizeof run_str, "%d", run_number);
+    snprintf(pop_str, sizeof pop_str, "%d", pop_number);
+    snprintf(value_str, sizeof value_str, "%.9g", metric_value);
+    const char *params[] = {run_str, pop_str, metric_name, value_str};
+
+    PGresult *res = PQexecParams(conn->pg, sql, 4, NULL, params, NULL, NULL, 0);
+    free(sql);
+    if (!res) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Metric insertion failed: %s\n",
+            PQerrorMessage(conn->pg)
+        );
+        return false;
+    }
+    bool ok = PQresultStatus(res) == PGRES_COMMAND_OK;
+    if (!ok) {
+        fprintf(
+            stderr,
+            "[demantoid | ERROR] Metric insertion failed: %s\n",
+            PQresultErrorMessage(res)
+        );
+    }
+    PQclear(res);
+    if (ok) {
+        fprintf(
+            stderr,
+            "[demantoid | INFO] Metric %s added to %s\n",
+            metric_name, conn->tablename
+        );
+    }
+    return ok;
 }

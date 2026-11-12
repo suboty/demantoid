@@ -72,6 +72,7 @@ def run_de(experiment_info_str: str) -> bool:
         tests_ok *= demantoid.add_metric(
             demantoid_conn,
             i_run,
+            -1,
             "test fitness best in population",
             best_values[i_run]
         )
